@@ -1,0 +1,6 @@
+.pio/
+.pioenvs/
+.piolibdeps/
+*.bin
+Screenshots/*.bmp
+__pycache__/
