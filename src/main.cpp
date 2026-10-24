@@ -15,13 +15,15 @@
 #include "ui/widgets.h"
 #include "touch/touch.h"
 #include "modules/bt_scanner.h"
+#include "modules/sd_log.h"
 #include "ui/screens/screen_list.h"
 
 static TFT_eSPI  tft;
 static TFT_eSPI *disp = &tft;
-static SPIClass  touchSPI(VSPI);
+static SPIClass  touchSPI(HSPI);
 
 static bool        s_needsRedraw = true;
+static int         s_detailIdx = -1;   // >= 0 shows the detail screen for that device
 static bool        s_backlightOff = false;
 static int         s_lastDeviceCount = -1;
 static int         s_lastAlertCount = -1;
@@ -240,6 +242,25 @@ void setup() {
         showSplash("BT init FAILED!");
         delay(3000);
     }
+#if SD_LOG_ENABLE
+    sdLogInit();
+    touchReinit();   // SD mount moves the shared SPI pins off the touch controller
+#endif
+#if SD_LOG_ENABLE
+    // Boot banner: SD state is otherwise only visible on the serial console.
+    {
+        const bool sdOk = sdLogReady();
+        tft.fillScreen(COL_BG);
+        tft.setTextDatum(MC_DATUM);
+        tft.setTextFont(2);
+        tft.setTextColor(sdOk ? COL_GREEN : COL_RED, COL_BG);
+        tft.drawString(sdOk ? "SD OK" : "NO SD CARD", SCREEN_W / 2, SCREEN_H / 2);
+        tft.setTextDatum(TL_DATUM);
+        delay(1500);
+        tft.fillScreen(COL_BG);
+        s_needsRedraw = true;
+    }
+#endif
     btScannerStart();
 
     // ── NO sleep timer — always on ──
@@ -275,13 +296,15 @@ void loop() {
     if (Serial.available()) {
         int cmd = Serial.read();
         if (cmd == 'R' || cmd == 'r') { Serial.println("READY"); }
+        else if (cmd == 'J' || cmd == 'j') { g_captureJson = !g_captureJson; Serial.print("CAPTURE:"); Serial.println(g_captureJson ? "on" : "off"); }
+        else if (cmd == 'L' || cmd == 'l') { sdLogSetEnabled(!sdLogEnabled()); Serial.print("SDLOG:"); Serial.println(sdLogEnabled() ? "on" : "off"); }
         else if (cmd == 'S' || cmd == 's') {
             // Capture via 8-bit sprite (matches CYD-Poker/Weather proven method)
             TFT_eSprite spr(&tft);
             spr.setColorDepth(8);
             uint8_t *fb = (uint8_t*)spr.createSprite(SCREEN_W, SCREEN_H);
             if (fb) {
-                screenListDraw(spr);
+                if (s_detailIdx >= 0) screenDetailDraw(spr, s_detailIdx); else screenListDraw(spr);
                 Serial.print("RGB332:");
                 Serial.write(fb, SCREEN_W * SCREEN_H);
                 Serial.flush();
@@ -309,6 +332,15 @@ void loop() {
 
     // ── Touch ──
     TouchEvent evt = touchPoll();
+
+    // ── Swipe: page the device list ──
+    if (evt.swipe == SwipeDir::Up || evt.swipe == SwipeDir::Down) {
+        if (s_detailIdx < 0) {
+            screenListScrollPage(evt.swipe == SwipeDir::Up ? 1 : -1);
+            s_needsRedraw = true;
+        }
+    }
+
     if (evt.tap == TapEvent::Tap) {
         int tx = evt.tapX, ty = evt.tapY;
 
@@ -318,6 +350,16 @@ void loop() {
             s_needsRedraw = true;
             delay(30);
             goto redraw;
+        }
+        // Detail screen: any tap closes it.
+        if (s_detailIdx >= 0) {
+            s_detailIdx = -1;
+            s_needsRedraw = true;
+            goto redraw;
+        }
+        {
+            int rowIdx = screenListRowAt(tx, ty);
+            if (rowIdx >= 0) { s_detailIdx = rowIdx; s_needsRedraw = true; }
         }
 
         // Power ring (top-right corner)
@@ -354,9 +396,13 @@ void loop() {
 
     }
 
+#if SD_LOG_ENABLE
+    if (sdLogFlush()) touchReinit();
+#endif
+
 redraw:
     if (s_needsRedraw) {
-        screenListDraw(tft);
+        if (s_detailIdx >= 0) screenDetailDraw(tft, s_detailIdx); else screenListDraw(tft);
         s_needsRedraw = false;
     }
 

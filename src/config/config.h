@@ -22,6 +22,13 @@
 #define TFT_BL     21
 
 // ── Touch (XPT2046 on VSPI — remapped) ───────────────────────────────────────
+#define SD_CS       5     // SD card CS, shares the display bus
+
+// SD logging is parked: the card, the display and the touch controller all end up
+// on the same SPI peripheral, and every arrangement so far traded one for another
+// (card mounts but touch dies, or touch works but the card will not mount).
+// See TODO.md before enabling this again.
+#define SD_LOG_ENABLE  1
 #define TOUCH_CS   33
 #define TOUCH_IRQ  36
 #define TOUCH_MOSI 32

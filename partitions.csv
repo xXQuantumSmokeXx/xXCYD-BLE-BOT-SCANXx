@@ -1,0 +1,9 @@
+# Custom partition table: single 2.94 MB app, no OTA slots.
+# This board is flashed from an SD card with a full merged image, so OTA is dead weight.
+# nvs stays at 0x9000 with the same size, so settings survive this change.
+# Name,   Type, SubType, Offset,   Size,     Flags
+nvs,      data, nvs,     0x9000,   0x5000,
+otadata,  data, ota,     0xe000,   0x2000,
+app0,     app,  ota_0,   0x10000,  0x2F0000,
+spiffs,   data, spiffs,  0x300000, 0xF0000,
+coredump, data, coredump,0x3F0000, 0x10000,

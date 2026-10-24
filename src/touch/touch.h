@@ -16,3 +16,7 @@ TouchEvent touchPoll();
 bool       touchIsHeld(int16_t *ox = nullptr, int16_t *oy = nullptr);
 void       touchSetRotation(int rotation);   // 0-3, NVS-backed
 int        touchGetRotation();
+
+// Re-assert the touch controller pins on its SPI bus. Needed because the SD card
+// initialisation reconfigures the shared peripheral.
+void touchReinit();

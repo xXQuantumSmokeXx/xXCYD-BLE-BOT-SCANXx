@@ -1,65 +1,56 @@
-# xXCYD-BLE-BOT-SCANXx
+# CYD BLE Bot Scan
 
-Passive Bluetooth scanner for CYD (Cheap Yellow Display) — detects nearby "BLE" devices and displays them in a live device list.
+Bluetooth awareness scanner for the ESP32 "Cheap Yellow Display" (CYD).
+Scans BLE advertisements and Classic BR/EDR inquiries, names what it can from the
+advertised name, the IEEE OUI registry and the Bluetooth SIG company identifiers,
+and shows a live, touch-driven list of everything nearby. Optionally logs every new
+device to the SD card.
 
-![Main Screen](Screenshots/Main-Screen.png)
+> **Documentation lives in three files:**
+> - **[FEATURES.md](FEATURES.md)** — what it does, how the scanning and naming
+>   pipeline works, screens, serial protocol, SD logging, build and flash workflow.
+> - **[TODO.md](TODO.md)** — what is next, ideas, known issues, and what is done.
+> - **README.md** (this file) — the short version.
 
-## Features
+---
 
-- **BLE scanning** — continuous passive scan with RSSI signal bars
-- **Live device list** — auto-updating list with signal strength, device name, MAC address, and type
-- **Shield mode** — alerts when new/unknown devices appear
-- **OUI manufacturer lookup** — identifies 170+ manufacturers across 50+ brands (Apple, Samsung, Google, Sony, Nintendo, etc.)
-- **3-button control** — ALERT toggle, SORT cycle, SCAN/STOP
-- **9 theme colors** — CYAN, GREEN, RED, ORANGE, YELLOW, GRAY, PURPLE, PINK, WHITE
-- **Both CYD board variants** — 1USB (ESP32-32E) and 2USB with auto-calibration
-- **Deep sleep** — power ring (top-right) with touch-to-wake
+## Status
 
-## Hardware
+Working: BLE + Classic scanning, device naming (OUI / company id / address type),
+list and detail screens, JSON capture over serial, SD-card logging.
 
-- CYD 2.8" (ESP32 + ILI9341 display)
-- No WiFi/internet needed — standalone BLE scanner
-- Touch navigation
+Working: SD-card logging *and* touch, simultaneously — display + SD on VSPI, touch on
+HSPI. Each new device is appended to `/ble.jsonl` on the card, so the device can build
+a corpus unattended. See FEATURES.md for the bus arrangement and the rules that keep it
+working.
 
-## Building
+## What it does
+
+- Active BLE scan (names included — the scan response is read, not dropped)
+- Classic BR/EDR inquiry in dual-mode, 10 s every 60 s
+- Identifies devices by: advertised name, OUI vendor, SIG company id, address type
+- Live list with RSSI bars, sort modes, shield/alert mode, swipe paging, and a detail screen on tap
+- Logs one JSON line per newly seen device to serial and to `/ble.jsonl` on the SD card
+
+## Screens
+
+| Screen | How to get there |
+|---|---|
+| List | boot |
+| Detail | tap any row; tap again to close |
+
+## Build
 
 ```bash
-# 1USB version (ESP32-32E)
-pio run -e cyd_ble_bot_scan
-
-# 2USB version
-pio run -e cyd_ble_bot_scan_2usb
+pio run -e cyd_ble_bot_scan_2usb     # 2-USB revision (flipped panel)
+pio run -e cyd_ble_bot_scan          # 1-USB revision
 ```
 
-Merged firmware binaries are output to `CYD-BLE-BOT-SCAN-1usb.bin` / `CYD-BLE-BOT-SCAN-2usb.bin`.
+The post-build script merges bootloader + partition table + app into
+`CYD-BLE-BOT-SCAN-<usb>.bin` in the project root. Copy that file to the SD card and
+flash it from the launcher on the device.
 
-## Screenshot
+## Serial (115200)
 
-```bash
-# Double-click, or:
-python screenshot.py COM11 Screenshots\screen.bmp
-```
-
-## Bottom Bar
-
-| Button | Function |
-|---|---|
-| `[ALERT OFF/ON]` | Toggle shield — alerts on new devices |
-| `[RSSI/NAME/TYPE/NEW]` | Cycle sort mode |
-| `[SCAN/STOP]` | Start/stop BLE scanning |
-| ● (lower-right dot) | Cycle theme color (9 colors) |
-
-## Serial Protocol
-
-| Command | Response |
-|---|---|
-| `R` | `READY` |
-| `S` | `RGB332:<screen data>` screenshot |
-| `M` | Cycle display MADCTL (2USB only) |
-| `T` | Cycle touch rotation (2USB only) |
-
-## Credits
-
-Built by xXQuantum-SmokeXx, with development assistance from Claude Code.
-
-OUI lookup table and shield/alert concept adapted from [RamboRogers/esp32-bluetooth-scanner](https://github.com/RamboRogers/esp32-bluetooth-scanner) by Matthew Rogers (MIT License).
+`R` ready · `S` screenshot (RGB332) · `J` toggle JSON capture · `L` toggle SD logging ·
+`M`/`T` panel/touch rotation (2-USB build only)

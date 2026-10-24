@@ -6,6 +6,8 @@
 #include <cstring>
 
 // ── Layout ────────────────────────────────────────────────────────────────
+#define SHOW_ADV_STATS 0   // top-bar diagnostic; 1 re-enables rep/nm counters
+
 static const int MY_BOTBAR_H = 28;  // thicker than config.h BOTBAR_H (22) — room for buttons
 static const int LIST_Y    = TOPBAR_H + 1;
 static const int ROW_H     = 12;
@@ -56,6 +58,40 @@ static void drawBtn(TFT_eSPI &tft, int x, int y, int w, int h, int r,
 //  Draw
 // ═══════════════════════════════════════════════════════════════════════════
 
+// Builds the left-column label: advertised name (or MAC tail) plus vendor, truncated
+// to fit. Shared by the measuring pass and the drawing pass.
+static void buildRowLabel(const BTDeviceEntry &dev, char *out, size_t outLen) {
+    char buf[52];
+    const char *base = dev.name[0] ? dev.name : (dev.macStr + 9);
+    const char *mark = (!dev.name[0] && dev.hasAdvertisedName) ? "*" : "";
+    if (dev.manufacturer[0])
+        snprintf(buf, sizeof(buf), "%s%s %s", base, mark, dev.manufacturer);
+    else
+        snprintf(buf, sizeof(buf), "%s%s", base, mark);
+
+    const int maxChars = 24;
+    const int len = (int)strlen(buf);
+    if (len > maxChars) {
+        memcpy(out, buf, maxChars - 1);
+        out[maxChars - 1] = '.';
+        out[maxChars] = '\0';
+    } else {
+        snprintf(out, outLen, "%s", buf);
+    }
+}
+// Right-column text: address-type letter plus device class when known.
+static void buildRowType(const BTDeviceEntry &dev, char *out, size_t outLen) {
+    const char addr = (dev.addrType == 0) ? 'P' : 'R';
+    if (dev.deviceType != BTDeviceType::Unknown)
+        snprintf(out, outLen, "%c %s", addr, btDeviceTypeName(dev.deviceType));
+    else
+        snprintf(out, outLen, "%c", addr);
+}
+
+// Row geometry from the last draw, so a tap can be mapped back to a device.
+static int s_scroll = 0;   // index of the first visible device
+static int s_rowY0 = 0;
+static int s_rowCount = 0;
 void screenListDraw(TFT_eSPI &tft) {
     tft.fillScreen(COL_BG);
 
@@ -85,12 +121,7 @@ void screenListDraw(TFT_eSPI &tft) {
     snprintf(buf, sizeof(buf), "%d Device%s online", count, count == 1 ? "" : "s");
     tft.print(buf);
 
-    // Classic BT indicator (if available)
-    if (btScannerGetClassicEnabled()) {
-        tft.setTextColor(COL_BLUE, COL_BG);
-        tft.setCursor(14, 19);
-        tft.print("+BT");
-    }
+
 
     // Power ring — top right
     tft.drawCircle(PWR_X, PWR_Y, PWR_R, g_themeColor);
@@ -99,6 +130,16 @@ void screenListDraw(TFT_eSPI &tft) {
     tft.drawLine(PWR_X - 1, PWR_Y - PWR_R + 4, PWR_X + 1, PWR_Y - PWR_R + 4, g_themeColor);
 
     // Shield status — moved left so it doesn't crowd the power ring
+#if SHOW_ADV_STATS
+    {
+        uint32_t rep = 0, nm = 0;
+        btScannerGetAdvStats(&rep, &nm);
+        tft.setTextColor(COL_DIM_GRAY, COL_BG);
+        tft.setCursor(150, 7);
+        tft.printf("rep %lu nm %lu", (unsigned long)rep, (unsigned long)nm);
+    }
+#endif
+
     if (shieldsUp) {
         tft.setTextColor(COL_RED, COL_BG);
         tft.setCursor(PWR_X - 70, 7);
@@ -109,69 +150,114 @@ void screenListDraw(TFT_eSPI &tft) {
     //  DEVICE ROWS
     // ═══════════════════════════════════════════════════════════════════════
 
-    int maxRows = (SCREEN_H - MY_BOTBAR_H - LIST_Y) / ROW_H;
+    const int listAreaH = SCREEN_H - MY_BOTBAR_H - LIST_Y;
+    int maxRows = listAreaH / ROW_H;
     if (maxRows < 0) maxRows = 0;
     int visible = (maxRows < count) ? maxRows : count;
 
-    for (int row = 0; row < visible; row++) {
-        const BTDeviceEntry &dev = devs[row];
-        int y = LIST_Y + row * ROW_H;
+    // Clamp the scroll offset: devices come and go, so the list can shrink under it.
+    int maxScroll = count - visible;
+    if (maxScroll < 0) maxScroll = 0;
+    if (s_scroll > maxScroll) s_scroll = maxScroll;
+    if (s_scroll < 0) s_scroll = 0;
 
+    // Clear the whole list area: rows move when the block is centred, and the old
+    // row separators would otherwise stay painted on the panel.
+    tft.fillRect(0, LIST_Y, SCREEN_W, listAreaH, COL_BG);
+
+    // Centre the block vertically, so a short list sits mid-screen rather than
+    // stacking against the top bar.
+    int listStartY = LIST_Y + (listAreaH - visible * ROW_H) / 2;
+    if (listStartY < LIST_Y) listStartY = LIST_Y;
+    s_rowY0 = listStartY;
+    s_rowCount = visible;
+
+    // Equal side margins so the list reads as a centred column.
+    const int listInset = 24;
+
+    // Measure the widest row first so every row shares one left edge: the block is
+    // centred as a whole, and each bar sits right beside its own number.
+    int maxCluster = 0;
+    for (int row = 0; row < visible; row++) {
+        char rb[6];
+        snprintf(rb, sizeof(rb), "%d", devs[s_scroll + row].rssi);
+        char nm[32];
+        buildRowLabel(devs[s_scroll + row], nm, sizeof(nm));
+        char ty[24];
+        buildRowType(devs[s_scroll + row], ty, sizeof(ty));
+        int cw = 22 + 6 + tft.textWidth(rb) + 8 + tft.textWidth(nm) + 8 + tft.textWidth(ty);
+        if (cw > maxCluster) maxCluster = cw;
+    }
+    int blockX = (SCREEN_W - maxCluster) / 2;
+    if (blockX < 2) blockX = 2;
+
+    for (int row = 0; row < visible; row++) {
+        const BTDeviceEntry &dev = devs[s_scroll + row];
+        int y = listStartY + row * ROW_H;
         uint16_t rowBg = COL_BG;
 
-        // ── RSSI bar ──
         int barW = map(dev.rssi, -100, -30, 1, 22);
         if (barW < 1) barW = 1;
         uint16_t barCol = g_themeColor;
         if (dev.rssi >= RSSI_USABLE) barCol = COL_GREEN;
         else if (dev.rssi < -90) barCol = COL_RED;
         if (dev.isAlert) barCol = COL_RED;
-        tft.fillRect(2, y + 3, barW, ROW_H - 7, barCol);
 
-        // ── RSSI number ──
         tft.setTextFont(1);
-        tft.setTextColor(COL_WHITE, rowBg);
-        tft.setCursor(26, y + 2);
-        char rbuf[5]; snprintf(rbuf, sizeof(rbuf), "%d", dev.rssi);
-        tft.print(rbuf);
+        char rbuf[6];
+        snprintf(rbuf, sizeof(rbuf), "%d", dev.rssi);
+        const int rw = tft.textWidth(rbuf);
 
-        // ── Name or MAC ──
-        const char *label = dev.name[0] ? dev.name : dev.macStr;
-        char nameBuf[22];
-        int len = strlen(label);
-        if (len > 20) { memcpy(nameBuf, label, 19); nameBuf[19]='.'; nameBuf[20]='\0'; }
-        else { strcpy(nameBuf, label); }
+        char nameBuf[32];
+        buildRowLabel(dev, nameBuf, sizeof(nameBuf));
+        const int lw = tft.textWidth(nameBuf);
+
+        char typeBuf[24];
+        buildRowType(dev, typeBuf, sizeof(typeBuf));
+        const char *extra = typeBuf;
+        const int ew = tft.textWidth(extra);
+
+        const int barSlot = 22, gap1 = 6, gap2 = 8, gap3 = 8;
+
+        // Bar right-aligned inside its slot so the gauge end meets the number.
+        tft.fillRect(blockX + barSlot - barW, y + 3, barW, ROW_H - 7, barCol);
+
+        tft.setTextColor(COL_WHITE, rowBg);
+        tft.setCursor(blockX + barSlot + gap1, y + 2);
+        tft.print(rbuf);
 
         uint16_t nameCol = dev.isAlert ? COL_RED :
             (dev.source == BTSource::Classic ? COL_BLUE : g_themeColor);
         tft.setTextColor(nameCol, rowBg);
-        tft.setCursor(56, y + 2);
+        tft.setCursor(blockX + barSlot + gap1 + rw + gap2, y + 2);
         tft.print(nameBuf);
 
-        // ── Type / manufacturer (right-aligned) ──
-        const char *extra = "";
-        if (dev.deviceType != BTDeviceType::Unknown)
-            extra = btDeviceTypeName(dev.deviceType);
-        else if (strcmp(dev.manufacturer, "Unknown") != 0)
-            extra = dev.manufacturer;
-        tft.setTextColor(COL_WHITE, rowBg);
-        int ew = tft.textWidth(extra);
-        tft.setCursor(SCREEN_W - ew - 3, y + 2);
-        tft.print(extra);
+        if (ew > 0) {
+            tft.setTextColor(COL_WHITE, rowBg);
+            tft.setCursor(blockX + barSlot + gap1 + rw + gap2 + lw + gap3, y + 2);
+            tft.print(extra);
+        }
 
-        // Row separator
-        if (row < visible - 1)
-            tft.drawFastHLine(0, y + ROW_H - 1, SCREEN_W, 0x1082);
+
     }
 
-    // ── Overflow ──
-    if (count > visible) {
+    // ── Scroll position and scrollbar ──
+    if (maxScroll > 0) {
         tft.setTextFont(1);
-        tft.setTextColor(g_themeColor, COL_BG);
-        snprintf(buf, sizeof(buf), "+%d more", count - visible);
-        int ow = tft.textWidth(buf);
-        tft.setCursor(SCREEN_W - ow - 4, LIST_Y + visible * ROW_H);
+        tft.setTextColor(COL_DIM_GRAY, COL_BG);
+        snprintf(buf, sizeof(buf), "%d-%d / %d", s_scroll + 1, s_scroll + visible, count);
+        const int ow = tft.textWidth(buf);
+        tft.setCursor(SCREEN_W - listInset - ow - 4, listStartY + visible * ROW_H);
         tft.print(buf);
+
+        const int barX = SCREEN_W - 5;
+        const int barY = listStartY;
+        const int barH = visible * ROW_H - 2;
+        tft.drawFastVLine(barX, barY, barH, COL_DIM_GRAY);
+        int thumbH = (barH * visible) / (count > 0 ? count : 1);
+        if (thumbH < 8) thumbH = 8;
+        const int thumbY = barY + ((barH - thumbH) * s_scroll) / maxScroll;
+        tft.fillRect(barX - 1, thumbY, 3, thumbH, g_themeColor);
     }
 
     // ── Empty state ──
@@ -258,3 +344,90 @@ bool screenListHitTheme(int tx, int ty) {
     int dy = ty - THEME_Y;
     return (dx*dx + dy*dy <= (THEME_R + 4)*(THEME_R + 4));
 }
+
+// Maps a tap to a visible row, or -1.
+int screenListRowAt(int tx, int ty) {
+    (void)tx;
+    if (s_rowCount <= 0) return -1;
+    if (ty < s_rowY0 || ty >= s_rowY0 + s_rowCount * ROW_H) return -1;
+    const int idx = (ty - s_rowY0) / ROW_H;
+    if (idx < 0 || idx >= s_rowCount) return -1;
+    return s_scroll + idx;
+}
+
+// Full-screen detail for one device. Tapping anywhere closes it.
+void screenDetailDraw(TFT_eSPI &tft, int idx) {
+    const BTDeviceEntry *dev = btScannerGetDevice(idx);
+    tft.fillScreen(COL_BG);
+
+    if (!dev) {
+        tft.setTextDatum(MC_DATUM);
+        tft.setTextFont(2);
+        tft.setTextColor(g_themeColor, COL_BG);
+        tft.drawString("Device gone", SCREEN_W / 2, SCREEN_H / 2);
+        tft.setTextDatum(TL_DATUM);
+        return;
+    }
+
+    tft.setTextDatum(TL_DATUM);
+    tft.setTextFont(2);
+    tft.setTextColor(g_themeColor, COL_BG);
+    tft.setCursor(6, 4);
+    tft.print(dev->name[0] ? dev->name : (dev->manufacturer[0] ? dev->manufacturer : "unknown device"));
+    tft.drawFastHLine(0, 22, SCREEN_W, g_themeColor);
+
+    tft.setTextFont(1);
+    int y = 28;
+    char buf[52];
+    auto field = [&](const char *k, const char *v) {
+        tft.setTextColor(COL_DIM_GRAY, COL_BG);
+        tft.setCursor(6, y);
+        tft.print(k);
+        tft.setTextColor(COL_WHITE, COL_BG);
+        tft.setCursor(80, y);
+        tft.print(v);
+        y += 13;
+    };
+
+    field("MAC", dev->macStr);
+    field("Vendor", dev->manufacturer[0] ? dev->manufacturer : "-");
+    field("Address", dev->addrType == 0 ? "public / stable" : "random / rotating");
+
+    snprintf(buf, sizeof(buf), "%s", btDeviceTypeName(dev->deviceType));
+    field("Type", buf);
+    snprintf(buf, sizeof(buf), "%d dBm", (int)dev->rssi);
+    field("RSSI", buf);
+    if (dev->hasTxPower) { snprintf(buf, sizeof(buf), "%d dBm", (int)dev->txPower); }
+    else { snprintf(buf, sizeof(buf), "-"); }
+    field("TX", buf);
+    if (dev->hasAppearance) { snprintf(buf, sizeof(buf), "0x%04X", dev->appearance); }
+    else { snprintf(buf, sizeof(buf), "-"); }
+    field("Appear", buf);
+    if (dev->hasMfgData) { snprintf(buf, sizeof(buf), "0x%04X", dev->manufacturerId); }
+    else { snprintf(buf, sizeof(buf), "-"); }
+    field("Co.ID", buf);
+    field("Source", btSourceLabel(dev->source));
+    snprintf(buf, sizeof(buf), "%u", (unsigned)dev->scanCount);
+    field("Reports", buf);
+
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextColor(g_themeColor, COL_BG);
+    tft.drawString("TAP TO CLOSE", SCREEN_W / 2, SCREEN_H - 12);
+    tft.setTextDatum(TL_DATUM);
+}
+// Scroll by whole pages; used by swipe gestures.
+void screenListScrollBy(int rows) {
+    s_scroll += rows;
+    if (s_scroll < 0) s_scroll = 0;
+    const int count = btScannerGetDeviceCount();
+    int maxScroll = count - s_rowCount;
+    if (maxScroll < 0) maxScroll = 0;
+    if (s_scroll > maxScroll) s_scroll = maxScroll;
+}
+
+void screenListScrollPage(int dir) {
+    const int page = (s_rowCount > 1) ? s_rowCount - 1 : 1;
+    screenListScrollBy(dir * page);
+}
+
+void screenListScrollTop() { s_scroll = 0; }

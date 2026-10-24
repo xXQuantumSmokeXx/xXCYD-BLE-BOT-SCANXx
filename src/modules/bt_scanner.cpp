@@ -17,142 +17,58 @@
 //  Constants
 // ═══════════════════════════════════════════════════════════════════════════════
 
-#define BLE_QUEUE_SIZE     16     // entries in the BLE → main loop queue
+#define BLE_QUEUE_SIZE     64     // entries in the BLE -> main loop queue (doubled: scan responses now delivered)
+// 0 = silence per-advertisement logging on the serial monitor
+#define BLE_DEBUG_ADV      0      // 0 = quiet; 1 logs every advertisement
 #define MAX_CLASSIC_RESULTS 32    // per inquiry cycle
+#define BT_DUAL_MODE_ATTEMPT 1    // bring the controller up as BTDM before BLE; 0 = BLE only
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  OUI Manufacturer Lookup Table
 // ═══════════════════════════════════════════════════════════════════════════════
 
-struct OUIEntry { const char* prefix; const char* name; };
-
-static const OUIEntry OUI_TABLE[] = {
-    // ── Apple ──
-    {"D0:03:4B", "Apple"}, {"AC:DE:48", "Apple"}, {"00:25:00", "Apple"},
-    {"3C:E0:72", "Apple"}, {"F0:18:98", "Apple"}, {"B8:53:AC", "Apple"},
-    {"4C:32:75", "Apple"}, {"68:AB:1E", "Apple"}, {"B0:34:95", "Apple"},
-    {"F0:D1:A9", "Apple"}, {"F4:0F:24", "Apple"}, {"A4:D1:8C", "Apple"},
-    {"7C:6D:62", "Apple"}, {"88:66:A5", "Apple"}, {"08:66:98", "Apple"},
-    // ── Samsung ──
-    {"00:1B:44", "Samsung"}, {"00:15:99", "Samsung"}, {"94:35:0A", "Samsung"},
-    {"F0:72:8C", "Samsung"}, {"CC:05:77", "Samsung"}, {"84:38:35", "Samsung"},
-    {"B4:4B:D2", "Samsung"}, {"E4:12:1D", "Samsung"}, {"8C:F5:A3", "Samsung"},
-    {"5C:41:E7", "Samsung"}, {"44:D1:FA", "Samsung"}, {"C8:D7:19", "Samsung"},
-    {"B0:52:16", "Samsung"},
-    // ── Google / Nest / Fitbit ──
-    {"28:11:A5", "Google"}, {"00:1A:11", "Google"}, {"D8:3A:DD", "Google"},
-    {"F4:F5:D8", "Google"}, {"3C:5A:B4", "Google"}, {"E4:F0:42", "Google"},
-    {"54:60:09", "Google"}, {"70:3A:CB", "Google"}, {"8C:F7:10", "Google"},
-    {"00:16:0A", "Fitbit"}, {"C0:28:8D", "Fitbit"},
-    // ── Microsoft ──
-    {"00:50:F2", "Microsoft"}, {"00:15:5D", "Microsoft"}, {"28:18:78", "Microsoft"},
-    {"7C:1E:52", "Microsoft"}, {"B0:52:7C", "Microsoft"},
-    // ── Xiaomi / Redmi / Poco ──
-    {"00:1A:7D", "Xiaomi"}, {"F8:A7:63", "Xiaomi"}, {"28:6C:07", "Xiaomi"},
-    {"D4:63:C6", "Xiaomi"}, {"C4:6E:1F", "Xiaomi"}, {"70:8B:CD", "Xiaomi"},
-    {"64:09:80", "Xiaomi"}, {"80:28:ED", "Xiaomi"}, {"F0:F6:98", "Xiaomi"},
-    {"28:E3:1F", "Xiaomi"}, {"04:77:85", "Xiaomi"},
-    // ── Huawei / Honor ──
-    {"00:1E:C1", "Huawei"}, {"30:FB:B8", "Huawei"}, {"DC:D9:16", "Huawei"},
-    {"40:BF:17", "Huawei"}, {"B0:68:E6", "Huawei"}, {"F4:5C:89", "Huawei"},
-    {"7C:B1:5D", "Huawei"}, {"A4:50:55", "Huawei"},
-    // ── Sony ──
-    {"00:01:4A", "Sony"}, {"00:24:BE", "Sony"}, {"30:F7:72", "Sony"},
-    {"5C:96:56", "Sony"}, {"BC:30:D9", "Sony"}, {"AC:9B:0A", "Sony"},
-    {"78:8B:2A", "Sony"}, {"F0:BF:97", "Sony"},
-    // ── LG ──
-    {"00:1A:8D", "LG"}, {"00:1D:C0", "LG"}, {"08:EE:8E", "LG"},
-    {"B4:82:C5", "LG"}, {"F8:95:C7", "LG"}, {"04:4E:AF", "LG"},
-    // ── Motorola / Lenovo ──
-    {"00:0A:28", "Motorola"}, {"00:11:B9", "Motorola"}, {"F4:56:2F", "Motorola"},
-    {"00:1B:EB", "OnePlus"}, {"C0:EE:FB", "OnePlus"},
-    {"1C:3A:60", "Lenovo"}, {"00:0F:B5", "Lenovo"}, {"54:EE:75", "Lenovo"},
-    // ── Oppo / Vivo / Realme ──
-    {"00:1B:97", "Oppo"}, {"C8:28:32", "Vivo"}, {"14:A7:8B", "Oppo"},
-    {"70:2E:97", "Oppo"}, {"E8:D4:83", "Vivo"},
-    // ── Intel ──
-    {"00:02:B3", "Intel"}, {"00:80:98", "Intel"}, {"E4:42:A6", "Intel"},
-    {"00:21:5C", "Intel"}, {"A4:17:31", "Intel"},
-    // ── Dell ──
-    {"00:14:22", "Dell"}, {"00:1C:23", "Dell"}, {"F0:4D:A2", "Dell"},
-    {"B8:CA:3A", "Dell"}, {"84:A9:3E", "Dell"},
-    // ── HP ──
-    {"00:1F:29", "HP"}, {"00:23:8B", "HP"}, {"64:51:06", "HP"},
-    {"D8:9D:67", "HP"}, {"C8:CB:B8", "HP"},
-    // ── Acer / ASUS ──
-    {"00:26:2D", "Acer"}, {"4C:0B:BE", "Acer"}, {"70:8B:78", "Acer"},
-    {"00:22:15", "ASUS"}, {"D8:50:E6", "ASUS"}, {"38:D5:47", "ASUS"},
-    // ── Bose ──
-    {"00:0C:8A", "Bose"}, {"5C:31:3E", "Bose"}, {"C8:84:47", "Bose"},
-    {"04:52:C7", "Bose"}, {"78:2B:46", "Bose"},
-    // ── JBL / Harman ──
-    {"00:1B:FE", "JBL"}, {"C4:13:E2", "JBL"}, {"00:26:BB", "JBL"},
-    {"00:0E:9F", "Harman"}, {"00:15:9E", "Harman"},
-    // ── Sennheiser / Jabra / Plantronics ──
-    {"00:1B:66", "Sennheiser"}, {"00:16:B8", "Jabra"}, {"00:0F:6D", "Jabra"},
-    {"00:0F:56", "Plantronics"},
-    // ── Skullcandy / Anker / Soundcore ──
-    {"FC:E8:6F", "Skullcandy"}, {"00:1C:91", "Anker"}, {"E8:78:65", "Anker"},
-    // ── Garmin / Polar / Amazfit ──
-    {"00:1B:C3", "Garmin"}, {"04:02:1F", "Garmin"},
-    {"00:22:D7", "Polar"},
-    {"E0:0D:B5", "Amazfit"},
-    // ── Nintendo / PlayStation / Xbox ──
-    {"00:09:BF", "Nintendo"}, {"40:F4:07", "Nintendo"}, {"7C:BB:8A", "Nintendo"},
-    {"00:1F:A7", "Nintendo"}, {"2C:10:C1", "Nintendo"},
-    {"00:04:1F", "Sony PS"}, {"F8:46:1C", "Sony PS"},
-    {"00:0D:3A", "MS Xbox"},
-    // ── Raspberry Pi ──
-    {"B8:27:EB", "Raspberry Pi"}, {"DC:A6:32", "Raspberry Pi"},
-    {"E4:5F:01", "Raspberry Pi"},
-    // ── ESP32 / Espressif ──
-    {"24:0A:C4", "ESP32"}, {"30:AE:A4", "ESP32"}, {"A0:20:A6", "ESP32"},
-    {"78:E3:6D", "ESP32"}, {"08:D1:F9", "ESP32"}, {"B0:A7:32", "ESP32"},
-    {"A8:03:2A", "ESP32"},
-    // ── Nordic / nRF ──
-    {"00:1A:CF", "Nordic"}, {"DC:25:EF", "Nordic"}, {"F1:92:D1", "Nordic"},
-    {"D7:28:5F", "Nordic"}, {"E4:31:45", "Nordic"},
-    // ── Tile ──
-    {"04:52:F3", "Tile"},
-    // ── Philips / TP-Link / Belkin ──
-    {"00:0D:E7", "Philips"}, {"00:17:88", "Philips"},
-    {"00:1D:0F", "TP-Link"}, {"00:1D:6A", "TP-Link"},
-    {"00:0D:72", "Belkin"},
-    // ── Logitech ──
-    {"00:07:61", "Logitech"}, {"00:1F:20", "Logitech"}, {"88:C6:26", "Logitech"},
-    // ── HTC / Nokia / BlackBerry ──
-    {"00:00:CA", "HTC"}, {"00:23:76", "HTC"},
-    {"00:1E:3A", "Nokia"}, {"00:0E:ED", "Nokia"},
-    // ── Tesla / Ford / Toyota (car BLE) ──
-    {"00:17:A1", "Toyota"}, {"00:26:55", "Ford"},
-    // ── DJI / GoPro ──
-    {"60:60:1F", "DJI"}, {"34:D2:62", "DJI"},
-    {"E0:23:4D", "GoPro"},
-    // ── Withings / Peloton / misc wearables ──
-    {"00:24:E4", "Withings"},
-    // ── Generic chipsets ──
-    {"00:02:72", "TI"}, {"00:02:6B", "TI"},
-    {"00:0B:57", "SiliconLabs"},
-    {"00:02:5B", "CSR"},
-    {"00:0A:9C", "Broadcom"},
-    {"00:10:60", "Broadcom"},
-};
-
-static const int OUI_COUNT = sizeof(OUI_TABLE) / sizeof(OUI_TABLE[0]);
+// OUI vendor table: generated from the IEEE registry by tools/gen-oui.mjs.
+// 16k prefixes across ~200 vendors; binary search keeps the lookup cheap.
+#include "oui_table.h"
+#include "sd_log.h"
 
 static const char* lookupOUI(const char* macStr) {
-    // Extract first 8 chars "XX:XX:XX" and match
-    char prefix[9];
-    memcpy(prefix, macStr, 8);
-    prefix[8] = '\0';
-    // Uppercase
-    for (int i = 0; i < 8; i++) {
-        if (prefix[i] >= 'a' && prefix[i] <= 'f') prefix[i] -= 32;
+    // macStr is "AA:BB:CC:DD:EE:FF"; the key is the first three octets.
+    auto nib = [](char c) -> int {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        return 0;
+    };
+    const uint32_t key = ((uint32_t)nib(macStr[0]) << 20) | ((uint32_t)nib(macStr[1]) << 16)
+                       | ((uint32_t)nib(macStr[3]) << 12) | ((uint32_t)nib(macStr[4]) << 8)
+                       | ((uint32_t)nib(macStr[6]) << 4)  |  (uint32_t)nib(macStr[7]);
+    int lo = 0;
+    int hi = OUI_ENTRY_COUNT - 1;
+    while (lo <= hi) {
+        const int mid = lo + (hi - lo) / 2;
+        const OuiRec &r = OUI_TABLE[mid];
+        const uint32_t k = ((uint32_t)r.b[0] << 16) | ((uint32_t)r.b[1] << 8) | (uint32_t)r.b[2];
+        if (k == key) return OUI_VENDORS[r.v];
+        if (k < key) lo = mid + 1; else hi = mid - 1;
     }
-    for (int i = 0; i < OUI_COUNT; i++) {
-        if (strcmp(prefix, OUI_TABLE[i].prefix) == 0) return OUI_TABLE[i].name;
+    return "";  // no OUI match; callers fall back to the MAC tail
+}
+// SIG company identifiers carried in manufacturer data. Devices with a random MAC
+// (phones, beacons) often have no usable OUI, but still advertise a company id.
+// Bluetooth SIG company identifiers: generated table, binary searched.
+#include "company_table.h"
+
+static const char* lookupCompanyId(uint16_t id) {
+    int lo = 0;
+    int hi = CID_COUNT - 1;
+    while (lo <= hi) {
+        const int mid = lo + (hi - lo) / 2;
+        const uint16_t v = CID_IDS[mid];
+        if (v == id) return CID_NAMES[CID_NAME_IDX[mid]];
+        if (v < id) lo = mid + 1; else hi = mid - 1;
     }
-    return "Unknown";
+    return "";
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -310,9 +226,19 @@ struct BLEDeviceData {
     bool    hasTxPower;
     bool    hasAppearance;
     bool    hasMfgData;
+    bool    hadNonAsciiName;
+    uint16_t svc16[4];      // 16-bit service UUIDs seen in the advertisement
+    uint8_t  svcCount;
+    bool     has128Svc;     // any 128-bit service UUID present
+    uint8_t  uuid128[16];   // first 128-bit service UUID seen
+    uint8_t  addrType;      // 0 = public, else random
 };
 
 static QueueHandle_t s_bleQueue = nullptr;
+
+// Advertisement counters: drive the serial summary and the on-screen diagnostic.
+static uint32_t s_advSeen = 0;
+static uint32_t s_advNamed = 0;
 
 class BleScanCallbacks : public BLEAdvertisedDeviceCallbacks {
     void onResult(BLEAdvertisedDevice advertisedDevice) override {
@@ -356,8 +282,34 @@ class BleScanCallbacks : public BLEAdvertisedDeviceCallbacks {
             }
         }
 
+        // Names can contain UTF-8 (emoji, CJK) that the ASCII-only TFT font cannot
+        // draw, which shows up as junk glyphs. Keep printable ASCII; if nothing
+        // survives, clear the name so the UI falls back to the MAC address.
+        if (data.hasName) {
+            char clean[BT_NAME_LEN];
+            size_t w = 0;
+            for (size_t i = 0; data.name[i] && w < BT_NAME_LEN - 1; i++) {
+                unsigned char c = (unsigned char)data.name[i];
+                if (c < 0x20 || c >= 0x7F) continue;   // drop non-printable / non-ASCII
+                if (w == 0 && c == ' ') continue;      // no leading space
+                clean[w++] = (char)c;
+            }
+            while (w > 0 && clean[w - 1] == ' ') w--;  // no trailing space
+            clean[w] = (char)0;
+            if (w > 0) {
+                memcpy(data.name, clean, w + 1);
+            } else {
+                // Keep the fact that a name existed, so the UI can show MAC* instead
+                // of pretending the device never advertised one.
+                data.name[0] = (char)0;
+                data.hasName = false;
+                data.hadNonAsciiName = true;
+            }
+        }
+
         // RSSI
         data.rssi = advertisedDevice.getRSSI();
+        data.addrType = (uint8_t)advertisedDevice.getAddressType();
 
         // TX Power
         if (advertisedDevice.haveTXPower()) {
@@ -382,12 +334,62 @@ class BleScanCallbacks : public BLEAdvertisedDeviceCallbacks {
             }
         }
 
+        // Service UUIDs: keep the 16-bit aliases, flag any 128-bit ones. This is the
+        // cheapest fingerprint for ecosystems (Fast Pair, vendor services).
+        data.svcCount = 0;
+        data.has128Svc = false;
+        {
+            const size_t svcTotal = advertisedDevice.getServiceUUIDCount();
+            for (size_t i = 0; i < svcTotal && i < 8; i++) {
+                const std::string u = advertisedDevice.getServiceUUID(i).toString();
+                // "0000fe2c-0000-1000-8000-00805f9b34fb" carries a 16-bit alias
+                if (u.size() == 36 && u.compare(0, 4, "0000") == 0 &&
+                    u.compare(8, 28, "-0000-1000-8000-00805f9b34fb") == 0) {
+                    if (data.svcCount < 4)
+                        data.svc16[data.svcCount++] = (uint16_t)strtol(u.substr(4, 4).c_str(), nullptr, 16);
+                } else {
+                    // Keep the first 128-bit UUID: vendor-specific services are the
+                    // strongest fingerprints. Parsed from the string form so this does
+                    // not depend on the IDF uuid struct layout.
+                    if (!data.has128Svc && u.size() == 36) {
+                        int b = 0;
+                        int hi = -1;
+                        for (size_t k = 0; k < u.size(); k++) {
+                            const char ch = u[k];
+                            int v = -1;
+                            if (ch >= '0' && ch <= '9') v = ch - '0';
+                            else if (ch >= 'a' && ch <= 'f') v = ch - 'a' + 10;
+                            else if (ch >= 'A' && ch <= 'F') v = ch - 'A' + 10;
+                            if (v < 0) continue;                 // skip the '-'
+                            if (hi < 0) hi = v;
+                            else { if (b < 16) data.uuid128[b++] = (uint8_t)((hi << 4) | v); hi = -1; }
+                        }
+                    }
+                    data.has128Svc = true;
+                }
+            }
+        }
         // Push to queue — non-blocking, drop if full
+        // Counters always run; printing stays behind the macro.
+        s_advSeen++;
+        if (data.hasName) s_advNamed++;
+
+#if BLE_DEBUG_ADV
+        if (data.hasName) {
+            Serial.printf("ADV %s rssi=%d len=%u name=%s\n",
+                          macStr.c_str(), (int)advertisedDevice.getRSSI(),
+                          (unsigned)advertisedDevice.getPayloadLength(), data.name);
+        } else if ((s_advSeen % 200u) == 0u) {
+            Serial.printf("ADV summary: %u reports, %u named\n", (unsigned)s_advSeen, (unsigned)s_advNamed);
+        }
+#endif
         xQueueSend(s_bleQueue, &data, 0);
     }
 };
 
 static BLEScan *s_pBLEScan = nullptr;
+static bool s_dualModeUp = false;
+bool g_captureJson = true;   // serial JSON dump of new devices; "J" toggles
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  Classic BT Inquiry
@@ -605,10 +607,30 @@ bool btScannerInit() {
     Serial.println("BT: starting BLE init...");
 
     // ── Init BLE via Arduino library (standard path, no dual-mode tricks) ──
+#if BT_DUAL_MODE_ATTEMPT
+    // Bring the controller up as BTDM (BR/EDR + BLE) *before* the Arduino BLE layer
+    // runs. BLEDevice::init() enables BLE-only, and a later attempt to switch with
+    // esp_bt_controller_enable(ESP_BT_MODE_BTDM) fails with ESP_ERR_INVALID_STATE -
+    // which is why Classic inquiry never worked on this board.
+    {
+        esp_bt_controller_config_t cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
+        if (esp_bt_controller_init(&cfg) == ESP_OK) {
+            if (esp_bt_controller_enable(ESP_BT_MODE_BTDM) == ESP_OK) {
+                s_dualModeUp = true;
+            } else {
+                esp_bt_controller_deinit();
+            }
+        }
+    }
+    Serial.printf("BT: dual-mode controller %s\n", s_dualModeUp ? "up" : "unavailable");
+#endif
     BLEDevice::init("CYD-BLE-BOT-SCAN");
 
     s_pBLEScan = BLEDevice::getScan();
-    s_pBLEScan->setAdvertisedDeviceCallbacks(new BleScanCallbacks());
+    // wantDuplicates=true is REQUIRED: with the default (false) the stack drops the
+    // scan-response report as a "duplicate" of the advertisement, so haveName() is
+    // false for every device whose name lives in the scan response.
+    s_pBLEScan->setAdvertisedDeviceCallbacks(new BleScanCallbacks(), true);
     s_pBLEScan->setActiveScan(true);
     s_pBLEScan->setInterval(BLE_SCAN_INTERVAL_MS);
     s_pBLEScan->setWindow(BLE_SCAN_WINDOW_MS);
@@ -620,16 +642,14 @@ bool btScannerInit() {
     // ── Attempt Classic BT (BR/EDR) — may not work on all ESP32 BLE stacks ──
     // The controller is in BLE-only mode from BLEDevice::init().
     // We try a single-shot upgrade to BTDM — if it fails, we accept BLE-only.
-    esp_err_t ret = esp_bt_controller_enable(ESP_BT_MODE_BTDM);
-    if (ret == ESP_OK) {
+    if (s_dualModeUp) {
         esp_bt_gap_register_callback(classicBTCallback);
         esp_bt_dev_set_device_name("CYD-BLE-BOT-SCAN");
-        Serial.println("BT: Classic BT enabled (dual-mode OK)");
         s_classicEnabled = true;
+        Serial.println("BT: Classic inquiry enabled (dual mode)");
     } else {
-        // Can't enable Classic — that's fine, BLE will still work
-        Serial.printf("BT: Classic BT not available (err %d), BLE-only mode\n", ret);
         s_classicEnabled = false;
+        Serial.println("BT: Classic unavailable, BLE-only");
     }
 
     Serial.println("BT: init complete");
@@ -654,8 +674,53 @@ void btScannerToggleScan() {
     }
 }
 
+// One log line per MAC per boot: entries expire and are recreated, so the device
+// table alone cannot remember what has already been written.
+#define LOG_MAC_MAX 128
+static uint8_t s_loggedMac[LOG_MAC_MAX][BT_MAC_LEN];
+static int     s_loggedCount = 0;
+
+static bool wasLogged(const uint8_t mac[BT_MAC_LEN]) {
+    for (int i = 0; i < s_loggedCount; i++)
+        if (memcmp(s_loggedMac[i], mac, BT_MAC_LEN) == 0) return true;
+    return false;
+}
+
+static void markLogged(const uint8_t mac[BT_MAC_LEN]) {
+    if (s_loggedCount < LOG_MAC_MAX) memcpy(s_loggedMac[s_loggedCount++], mac, BT_MAC_LEN);
+}
+
+static void logBleDevice(const BTDeviceEntry *e, const BLEDeviceData &d) {
+    char line[320];
+    int n = snprintf(line, sizeof(line),
+        "{\"mac\":\"%s\",\"rssi\":%d,\"name\":\"%s\",\"vendor\":\"%s\","
+        "\"cid\":\"0x%04X\",\"app\":\"0x%04X\",\"tx\":%d,\"addr\":\"%s\",\"svc\":[",
+        e->macStr, (int)d.rssi, e->name, e->manufacturer,
+        d.hasMfgData ? d.manufacturerId : 0,
+        d.hasAppearance ? d.appearance : 0,
+        d.hasTxPower ? (int)d.txPower : 127,
+        d.addrType == 0 ? "public" : "random");
+    if (n < 0) return;
+    if (n > (int)sizeof(line) - 8) n = (int)sizeof(line) - 8;
+
+    for (uint8_t i = 0; i < d.svcCount && n < (int)sizeof(line) - 12; i++)
+        n += snprintf(line + n, sizeof(line) - n, "%s\"0x%04X\"", i ? "," : "", d.svc16[i]);
+
+    n += snprintf(line + n, sizeof(line) - n, "],\"v128\":%s", d.has128Svc ? "true" : "false");
+    if (d.has128Svc && n < (int)sizeof(line) - 42) {
+        n += snprintf(line + n, sizeof(line) - n, ",\"u128\":\"");
+        for (int i = 0; i < 16; i++)
+            n += snprintf(line + n, sizeof(line) - n, "%02X", d.uuid128[i]);
+        n += snprintf(line + n, sizeof(line) - n, "\"");
+    }
+    snprintf(line + n, sizeof(line) - n, "}");
+
+    Serial.print("JSON ");
+    Serial.println(line);
+    sdLogAppend(line);
+}
 void btScannerUpdate() {
-    // ── Drain BLE queue ──
+    // -- Drain BLE queue --
     BLEDeviceData data;
     while (xQueueReceive(s_bleQueue, &data, 0) == pdTRUE) {
         if (!passesRssiFilter(data.rssi)) continue;
@@ -663,11 +728,13 @@ void btScannerUpdate() {
         BTDeviceEntry *entry = upsertDevice(data.mac, BTSource::BLE);
         if (!entry) continue;
 
-        entry->rssi = data.rssi;
+entry->rssi = data.rssi;
+        entry->addrType = data.addrType;
 
         if (data.hasName && data.name[0]) {
             strncpy(entry->name, data.name, BT_NAME_LEN - 1);
         }
+        if (data.hadNonAsciiName) entry->hasAdvertisedName = true;
         if (data.hasTxPower) {
             entry->txPower = data.txPower;
             entry->hasTxPower = true;
@@ -679,8 +746,21 @@ void btScannerUpdate() {
         if (data.hasMfgData) {
             entry->manufacturerId = data.manufacturerId;
             entry->hasMfgData = true;
+            // Random-MAC devices have no OUI match; the company id still names them.
+            if (!entry->manufacturer[0]) {
+                const char *c = lookupCompanyId(data.manufacturerId);
+                if (c[0]) strncpy(entry->manufacturer, c, BT_MFG_NAME_LEN - 1);
+            }
         }
 
+        // Log once, after name/vendor are populated. Devices that never advertise a
+        // name are written after a few sightings so they are not lost entirely.
+        if (g_captureJson && !entry->logged && !wasLogged(data.mac) &&
+            (data.hasName || entry->scanCount >= 3)) {
+            logBleDevice(entry, data);
+            entry->logged = true;
+            markLogged(data.mac);
+        }
         // Shield check
         if (s_shieldUp && !entry->isAlert && !isKnownDevice(data.mac)) {
             entry->isAlert = true;
@@ -688,7 +768,7 @@ void btScannerUpdate() {
         }
     }
 
-    // ── Process Classic BT results ──
+    // -- Process Classic BT results --
     if (!s_classicInProgress && s_classicResultCount > 0 && s_scanState != ScanState::ClassicInquiry) {
         for (int i = 0; i < s_classicResultCount; i++) {
             ClassicBTDevice *cd = &s_classicResults[i];
@@ -702,6 +782,19 @@ void btScannerUpdate() {
                 strncpy(entry->name, cd->name, BT_NAME_LEN - 1);
             }
             entry->classOfDevice = cd->classOfDevice;
+
+            if (g_captureJson && !entry->logged && !wasLogged(cd->mac)) {
+                char line[176];
+                snprintf(line, sizeof(line),
+                    "{\"src\":\"classic\",\"mac\":\"%s\",\"rssi\":%d,\"name\":\"%s\",\"cod\":\"0x%06X\"}",
+                    entry->macStr, (int)cd->rssi, entry->name, (unsigned)cd->classOfDevice);
+                Serial.print("JSON ");
+                Serial.println(line);
+                sdLogAppend(line);
+                entry->logged = true;
+                markLogged(cd->mac);
+            }
+
             entry->deviceType = decodeClassOfDevice(cd->classOfDevice);
 
             if (s_shieldUp && !entry->isAlert && !isKnownDevice(cd->mac)) {
@@ -712,7 +805,6 @@ void btScannerUpdate() {
         s_classicResultCount = 0;
         sortDevices();
     }
-
     // ── Classic BT inquiry scheduling ──
     if (s_classicEnabled &&
         s_scanState == ScanState::BLEScanning &&
@@ -754,6 +846,11 @@ void btScannerUpdate() {
 
     // ── Sort ──
     sortDevices();
+}
+
+void btScannerGetAdvStats(uint32_t *reports, uint32_t *named) {
+    if (reports) *reports = s_advSeen;
+    if (named)   *named   = s_advNamed;
 }
 
 int btScannerGetDeviceCount() {

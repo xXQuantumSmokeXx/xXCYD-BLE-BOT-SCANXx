@@ -5,7 +5,7 @@
 #include <SPI.h>
 #include <cstdlib>
 
-static SPIClass            g_touchSPI(VSPI);
+static SPIClass            g_touchSPI(HSPI);   // own peripheral: display+SD own VSPI
 static XPT2046_Touchscreen g_ts(TOUCH_CS);   // no IRQ pin — poll directly
 
 static int s_touchRotation = 2;   // 0-3, NVS-backed; default rotates 2 (180°)
@@ -107,4 +107,8 @@ void touchSetRotation(int rotation) {
 
 int touchGetRotation() {
     return s_touchRotation;
+}
+
+void touchReinit() {
+    g_touchSPI.begin(TOUCH_SCLK, TOUCH_MISO, TOUCH_MOSI, TOUCH_CS);
 }

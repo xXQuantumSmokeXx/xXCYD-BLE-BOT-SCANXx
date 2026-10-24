@@ -41,6 +41,9 @@ struct BTDeviceEntry {
 
     // Shield/alert
     bool        isAlert;
+    uint8_t     addrType;      // BLE address type: 0 = public/stable, else random
+    bool        logged;        // JSON line already written for this entry
+    bool        hasAdvertisedName;  // a name existed but was not ASCII-renderable
 };
 
 // ── Scan state ───────────────────────────────────────────────────────────────
@@ -79,7 +82,10 @@ void btScannerUpdate();
 
 int          btScannerGetDeviceCount();
 const BTDeviceEntry* btScannerGetDevices();       // returns sorted array
-const BTDeviceEntry* btScannerGetDevice(int idx); // nullptr if out of range
+void btScannerGetAdvStats(uint32_t *reports, uint32_t *named);  // diagnostic counters
+
+// Serial JSON dump of newly seen devices (toggle with "J" on the serial console)
+extern bool g_captureJson;const BTDeviceEntry* btScannerGetDevice(int idx); // nullptr if out of range
 
 // ── Config ───────────────────────────────────────────────────────────────────
 
@@ -115,3 +121,4 @@ void btScannerGetHistoryRaw(int *buf, int maxLen);  // fill buf with HISTORY_POI
 
 const char* btDeviceTypeName(BTDeviceType t);
 const char* btSourceLabel(BTSource s);
+
