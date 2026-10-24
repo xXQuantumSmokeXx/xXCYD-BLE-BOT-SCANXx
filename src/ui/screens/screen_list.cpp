@@ -12,28 +12,27 @@ static const int MY_BOTBAR_H = 28;  // thicker than config.h BOTBAR_H (22) — r
 static const int LIST_Y    = TOPBAR_H + 1;
 static const int ROW_H     = 12;
 
-// Bottom bar: 3 buttons centered evenly
-// BTN1_W + BTN2_W + BTN3_W = 70+74+70 = 214, screen=320, gap=(320-214)/4=26.5→26
-static const int BTN_Y     = SCREEN_H - MY_BOTBAR_H + 3;
-static const int BTN_H     = 22;
-static const int BTN_R     = 5;
-static const int BTN1_W    = 70;
-static const int BTN2_W    = 74;
-static const int BTN3_W    = 70;
-static const int BTN_GAP   = 26;
-static const int BTN1_X    = BTN_GAP;
-static const int BTN2_X    = BTN1_X + BTN1_W + BTN_GAP;
-static const int BTN3_X    = BTN2_X + BTN2_W + BTN_GAP;
+// Bottom bar: ALERT pinned to the left corner, STOP to the right corner, SORT centred
+static const int BTN_Y      = SCREEN_H - MY_BOTBAR_H + 3;
+static const int BTN_H      = 22;
+static const int BTN_R      = 5;
+static const int BTN1_W     = 70;
+static const int BTN2_W     = 74;
+static const int BTN3_W     = 70;
+static const int BTN_MARGIN = 4;
+static const int BTN1_X     = BTN_MARGIN;
+static const int BTN3_X     = SCREEN_W - BTN_MARGIN - BTN3_W;
+static const int BTN2_X     = (SCREEN_W - BTN2_W) / 2;
 
 // Power ring
 static const int PWR_X     = SCREEN_W - 14;
 static const int PWR_Y     = 11;
 static const int PWR_R     = 8;
 
-// Theme dot (lower-right corner)
-static const int THEME_X   = SCREEN_W - 10;
-static const int THEME_Y   = SCREEN_H - 13;
-static const int THEME_R   = 6;
+// Theme dot: top bar, immediately left of the power ring
+static const int THEME_R   = 5;
+static const int THEME_X   = PWR_X - 26;
+static const int THEME_Y   = PWR_Y;
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  Helpers
@@ -142,7 +141,8 @@ void screenListDraw(TFT_eSPI &tft) {
 
     if (shieldsUp) {
         tft.setTextColor(COL_RED, COL_BG);
-        tft.setCursor(PWR_X - 70, 7);
+        const int sw = tft.textWidth("SHIELD UP");
+        tft.setCursor(THEME_X - THEME_R - sw - 8, 7);
         tft.print("SHIELD UP");
     }
 
@@ -245,9 +245,10 @@ void screenListDraw(TFT_eSPI &tft) {
     if (maxScroll > 0) {
         tft.setTextFont(1);
         tft.setTextColor(COL_DIM_GRAY, COL_BG);
+        // Position readout lives in the top bar; under the list it collided with the
+        // bottom bar once the rows filled up.
         snprintf(buf, sizeof(buf), "%d-%d / %d", s_scroll + 1, s_scroll + visible, count);
-        const int ow = tft.textWidth(buf);
-        tft.setCursor(SCREEN_W - listInset - ow - 4, listStartY + visible * ROW_H);
+        tft.setCursor(136, 7);
         tft.print(buf);
 
         const int barX = SCREEN_W - 5;
