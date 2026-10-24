@@ -55,6 +55,10 @@ Needs a corpus from the SD log.
   silently kill touch input.
 - Classic BR/EDR finds are unverified — the stack comes up but no classic device has
   been captured. Worth a walk-around test.
+- Format/argument mismatches are now build errors (`-Wformat=2 -Werror=format`). One shipped in
+  v1.1-era builds: a `%s` was added to the JSON format without its argument, printing garbage
+  and faulting. If a build suddenly fails on `format-truncation`, size the buffer rather than
+  dropping the flag.
 - `pio run` occasionally reports a spurious `In file included from ...` error on the
   first invocation and builds fine on retry.
 - 1-USB env has not been rebuilt since the layout work; rebuild before flashing it.

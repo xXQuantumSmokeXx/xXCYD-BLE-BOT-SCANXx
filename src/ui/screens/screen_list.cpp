@@ -75,7 +75,7 @@ static void buildRowLabel(const BTDeviceEntry &dev, char *out, size_t outLen) {
         out[maxChars - 1] = '.';
         out[maxChars] = '\0';
     } else {
-        snprintf(out, outLen, "%s", buf);
+        snprintf(out, outLen, "%.*s", (int)(outLen - 1), buf);
     }
 }
 // Right-column text: address-type letter plus device class when known.

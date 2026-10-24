@@ -138,7 +138,7 @@ void drawBottombar(TFT_eSPI &tft, const char *statusLabel, int activeScreen, int
     // ── Battery % — just left of right arrow ──
     int batt = batteryPct();
     if (batt >= 0) {
-        char bbuf[8];
+        char bbuf[12];
         snprintf(bbuf, sizeof(bbuf), "%d%%", batt);
         tft.setTextFont(FONT_MD);
         int bw = tft.textWidth(bbuf);

@@ -722,7 +722,7 @@ static void logBleDevice(const BTDeviceEntry *e, const BLEDeviceData &d) {
         d.hasMfgData ? d.manufacturerId : 0,
         d.hasAppearance ? d.appearance : 0,
         d.hasTxPower ? (int)d.txPower : 127,
-        d.addrType == 0 ? "public" : "random");
+        d.addrType == 0 ? "public" : "random", e->sigLabel);
     if (n < 0) return;
     if (n > (int)sizeof(line) - 8) n = (int)sizeof(line) - 8;
 
