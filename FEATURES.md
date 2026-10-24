@@ -233,6 +233,10 @@ pio run -e cyd_ble_bot_scan_2usb        # 2-USB panel
 pio run -e cyd_ble_bot_scan             # 1-USB panel
 ```
 
+Both environments build with `-Wformat=2 -Werror=format`: a format/argument mismatch is a
+build error. Format-truncation warnings are treated as errors too, so buffers get sized
+rather than silently truncating.
+
 `merge_bin.py` (post-build) concatenates bootloader + partition table + app +
 `boot_app0` into `CYD-BLE-BOT-SCAN-<usb>.bin`. That single file is copied to the SD
 card and flashed by the launcher on the device.
@@ -249,7 +253,7 @@ card and flashed by the launcher on the device.
 | spiffs | 0x300000 | 0xF0000 |
 | coredump | 0x3F0000 | 0x10000 |
 
-Current usage: ~42.6% of the app partition, ~16.3% of RAM.
+Current usage: ~42.6% of the app partition, ~16.8% of RAM.
 
 ---
 

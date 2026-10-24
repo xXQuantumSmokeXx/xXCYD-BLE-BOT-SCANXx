@@ -96,3 +96,5 @@ Needs a corpus from the SD log.
   packet, label shown in the row and detail screen and logged as `sig`.
 - **Corpus analyser** — `tools/analyze-corpus.mjs` proposes signatures from `ble.jsonl`.
 - **Payload dump** — one hex dump per new device, `H` toggles, decoded by `tools/decode-adv.mjs`.
+- **v1.1 published** — release notes, both binaries, README screenshot; binaries replaced and
+  the tag moved after the logging crash fix.

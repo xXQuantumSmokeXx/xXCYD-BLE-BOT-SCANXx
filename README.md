@@ -71,6 +71,7 @@ release rewrites the table, and NVS settings survive.
 | `R` | `READY` |
 | `S` | `RGB332:<screen data>` screenshot (320x240, one byte per pixel) |
 | `J` | toggle JSON capture |
+| `H` | toggle raw payload hex dump |
 | `L` | toggle SD logging |
 | `M` | cycle display MADCTL (2USB only) |
 | `T` | cycle touch rotation (2USB only) |
