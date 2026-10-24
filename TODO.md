@@ -19,6 +19,7 @@ Needs a corpus from the SD log.
 
 - [x] engine: `signatures.json` -> `tools/gen-signatures.mjs` -> `signatures.h`, matched per packet
 - [x] first rules: Govee light, AM410, 3E128 sensor family, Apple Find My accessory
+- [x] raw payload dump + `tools/decode-adv.mjs` decoder (validates name parsing)
 - [ ] grow the rule set from a bigger corpus (walk-around)
 - [ ] name-prefix patterns (`Flock-*`, `Ray-Ban*`, `Meta *`, `AirPods*`, ...)
 - [ ] service-UUID → class (Fast Pair, ANCS, Find My, vendor 128-bit UUIDs)
@@ -90,3 +91,4 @@ Needs a corpus from the SD log.
 - **Detection signature engine** — JSON rules -> generated header, matched on every
   packet, label shown in the row and detail screen and logged as `sig`.
 - **Corpus analyser** — `tools/analyze-corpus.mjs` proposes signatures from `ble.jsonl`.
+- **Payload dump** — one hex dump per new device, `H` toggles, decoded by `tools/decode-adv.mjs`.

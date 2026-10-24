@@ -232,6 +232,8 @@ struct BLEDeviceData {
     uint8_t  svcCount;
     bool     has128Svc;     // any 128-bit service UUID present
     uint8_t  uuid128[16];   // first 128-bit service UUID seen
+    uint8_t  payload[62];   // raw ADV_IND + SCAN_RSP bytes, for name-parse debugging
+    uint8_t  payloadLen;
     uint8_t  addrType;      // 0 = public, else random
 };
 
@@ -370,6 +372,12 @@ class BleScanCallbacks : public BLEAdvertisedDeviceCallbacks {
                 }
             }
         }
+        // Keep the raw advertisement so name parsing can be checked off-device.
+        data.payloadLen = (uint8_t)advertisedDevice.getPayloadLength();
+        if (data.payloadLen > sizeof(data.payload)) data.payloadLen = sizeof(data.payload);
+        if (data.payloadLen) memcpy(data.payload, advertisedDevice.getPayload(), data.payloadLen);
+        if (data.payloadLen) memset(data.payload + data.payloadLen, 0, sizeof(data.payload) - data.payloadLen);
+        else memset(data.payload, 0, sizeof(data.payload));
         // Push to queue — non-blocking, drop if full
         // Counters always run; printing stays behind the macro.
         s_advSeen++;
@@ -391,6 +399,7 @@ class BleScanCallbacks : public BLEAdvertisedDeviceCallbacks {
 static BLEScan *s_pBLEScan = nullptr;
 static bool s_dualModeUp = false;
 bool g_captureJson = true;   // serial JSON dump of new devices; "J" toggles
+bool g_rawDump    = true;   // hex dump of each new device advertisement; "H" toggles
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  Classic BT Inquiry
@@ -691,6 +700,19 @@ static void markLogged(const uint8_t mac[BT_MAC_LEN]) {
     if (s_loggedCount < LOG_MAC_MAX) memcpy(s_loggedMac[s_loggedCount++], mac, BT_MAC_LEN);
 }
 
+static void logRawPayload(const BTDeviceEntry *e, const BLEDeviceData &d) {
+    if (!g_rawDump || d.payloadLen == 0) return;
+    char line[200];
+    int n = snprintf(line, sizeof(line), "{\"raw\":\"%s\",\"len\":%u,\"hex\":\"",
+                     e->macStr, (unsigned)d.payloadLen);
+    if (n < 0) return;
+    for (uint8_t i = 0; i < d.payloadLen && n < (int)sizeof(line) - 4; i++)
+        n += snprintf(line + n, sizeof(line) - n, "%02X", d.payload[i]);
+    snprintf(line + n, sizeof(line) - n, "\"}");
+    Serial.print("RAW ");
+    Serial.println(line);
+    sdLogAppend(line);
+}
 static void logBleDevice(const BTDeviceEntry *e, const BLEDeviceData &d) {
     char line[320];
     int n = snprintf(line, sizeof(line),
@@ -759,6 +781,7 @@ entry->rssi = data.rssi;
         if (g_captureJson && !entry->logged && !wasLogged(data.mac) &&
             (data.hasName || entry->scanCount >= 3)) {
             logBleDevice(entry, data);
+            logRawPayload(entry, data);
             entry->logged = true;
             markLogged(data.mac);
         }

@@ -298,6 +298,7 @@ void loop() {
         if (cmd == 'R' || cmd == 'r') { Serial.println("READY"); }
         else if (cmd == 'J' || cmd == 'j') { g_captureJson = !g_captureJson; Serial.print("CAPTURE:"); Serial.println(g_captureJson ? "on" : "off"); }
         else if (cmd == 'L' || cmd == 'l') { sdLogSetEnabled(!sdLogEnabled()); Serial.print("SDLOG:"); Serial.println(sdLogEnabled() ? "on" : "off"); }
+        else if (cmd == 'H' || cmd == 'h') { g_rawDump = !g_rawDump; Serial.print("RAWD:"); Serial.println(g_rawDump ? "on" : "off"); }
         else if (cmd == 'S' || cmd == 's') {
             // Capture via 8-bit sprite (matches CYD-Poker/Weather proven method)
             TFT_eSprite spr(&tft);

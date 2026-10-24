@@ -173,6 +173,7 @@ number of bus transactions low. Touch is re-asserted after mount and after each 
 | `R` | print `READY` |
 | `S` | screenshot: prints `RGB332:` then 320×240 bytes, one byte per pixel |
 | `J` | toggle JSON capture for newly seen devices |
+| `H` | toggle raw payload hex dump |
 | `L` | toggle SD logging |
 | `M` | cycle panel rotation (2-USB build only) |
 | `T` | cycle touch rotation (2-USB build only) |
@@ -209,6 +210,19 @@ written after name/vendor are parsed, so it carries the name rather than an empt
 string; devices that never advertise a name are written after three sightings.
 
 Serial lines are prefixed with `JSON `; the SD file is bare JSON.
+
+### Raw payload dump
+
+Each newly seen device also emits one hex dump of its advertisement (ADV_IND plus scan
+response, up to 62 bytes):
+
+```json
+{"raw":"E8:F6:0A:CB:1C:D1","len":31,"hex":"02010606095F31636430..."}
+```
+
+Decode it with `node tools/decode-adv.mjs <file>` to see every AD structure, including
+malformed ones — the way to check that a device name was parsed from the right bytes.
+`H` toggles the dump at runtime.
 
 ---
 

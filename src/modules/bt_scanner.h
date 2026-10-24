@@ -86,7 +86,8 @@ const BTDeviceEntry* btScannerGetDevices();       // returns sorted array
 void btScannerGetAdvStats(uint32_t *reports, uint32_t *named);  // diagnostic counters
 
 // Serial JSON dump of newly seen devices (toggle with "J" on the serial console)
-extern bool g_captureJson;const BTDeviceEntry* btScannerGetDevice(int idx); // nullptr if out of range
+extern bool g_captureJson;
+extern bool g_rawDump;const BTDeviceEntry* btScannerGetDevice(int idx); // nullptr if out of range
 
 // ── Config ───────────────────────────────────────────────────────────────────
 
