@@ -14,9 +14,12 @@ Logging works (display + SD on VSPI, touch on HSPI). Remaining niceties:
 - [ ] Show SD state and record count on the list screen
 - [ ] Rotate or cap `/ble.jsonl` (no RTC, so rotate by size or boot count)
 - [ ] Long-run soak: confirm no display glitches and no card corruption over hours
-### Class signatures
+### Class signatures  (engine landed)
 Needs a corpus from the SD log.
 
+- [x] engine: `signatures.json` -> `tools/gen-signatures.mjs` -> `signatures.h`, matched per packet
+- [x] first rules: Govee light, AM410, 3E128 sensor family, Apple Find My accessory
+- [ ] grow the rule set from a bigger corpus (walk-around)
 - [ ] name-prefix patterns (`Flock-*`, `Ray-Ban*`, `Meta *`, `AirPods*`, ...)
 - [ ] service-UUID → class (Fast Pair, ANCS, Find My, vendor 128-bit UUIDs)
 - [ ] company-id → class for known camera / eyewear vendors
@@ -84,3 +87,6 @@ Needs a corpus from the SD log.
 - **Footprint trim** — dropped unused TFT fonts 6/7/8 and the smooth-font engine.
 - **merge_bin.py hardened** — ASCII output, UTF-8 stdout, boot_app0 at 0xe000.
 - **Docs** — README.md, FEATURES.md, TODO.md.
+- **Detection signature engine** — JSON rules -> generated header, matched on every
+  packet, label shown in the row and detail screen and logged as `sig`.
+- **Corpus analyser** — `tools/analyze-corpus.mjs` proposes signatures from `ble.jsonl`.

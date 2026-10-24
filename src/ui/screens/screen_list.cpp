@@ -81,7 +81,9 @@ static void buildRowLabel(const BTDeviceEntry &dev, char *out, size_t outLen) {
 // Right-column text: address-type letter plus device class when known.
 static void buildRowType(const BTDeviceEntry &dev, char *out, size_t outLen) {
     const char addr = (dev.addrType == 0) ? 'P' : 'R';
-    if (dev.deviceType != BTDeviceType::Unknown)
+    if (dev.sigLabel[0])
+        snprintf(out, outLen, "%c %s", addr, dev.sigLabel);          // matched signature
+    else if (dev.deviceType != BTDeviceType::Unknown)
         snprintf(out, outLen, "%c %s", addr, btDeviceTypeName(dev.deviceType));
     else
         snprintf(out, outLen, "%c", addr);
@@ -408,6 +410,7 @@ void screenDetailDraw(TFT_eSPI &tft, int idx) {
     else { snprintf(buf, sizeof(buf), "-"); }
     field("Co.ID", buf);
     field("Source", btSourceLabel(dev->source));
+    field("Match", dev->sigLabel[0] ? dev->sigLabel : "-");
     snprintf(buf, sizeof(buf), "%u", (unsigned)dev->scanCount);
     field("Reports", buf);
 

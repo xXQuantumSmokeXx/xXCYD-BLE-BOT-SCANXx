@@ -82,6 +82,33 @@ node tools/gen-cids.mjs <company_identifiers.yaml> [maxId]
 
 ---
 
+## Detection signatures
+
+Rules live in `signatures.json` and are compiled into `src/modules/signatures.h` by
+`tools/gen-signatures.mjs`. A rule matches when every field it specifies matches:
+
+| Field | Meaning |
+|---|---|
+| `name_prefix` | advertised name starts with this |
+| `cid` | SIG company id from manufacturer data |
+| `svc16` | a 16-bit service UUID is present |
+| `u128` | the captured 128-bit service UUID equals this |
+| `vendor_not` | OUI vendor is not this (used to spot Find My accessories) |
+
+First match wins, so specific rules go first. The matched label replaces the device
+class in the right-hand column (`P Light`, `R FindMy`), appears as `Match` on the detail
+screen, and is logged as `sig` in every JSON line.
+
+Current rules, each backed by corpus evidence:
+
+| Label | Rule |
+|---|---|
+| `Light` | name starts `Govee_` and company id `0x8803` |
+| `Appliance` | name starts `AM410` |
+| `Sensor` | 128-bit service `3E1D50CD…` |
+| `FindMy` | company id `0x004C` on a non-Apple OUI |
+
+Add a rule by editing `signatures.json` and running the generator; no C++ changes.
 ## Screens
 
 ### List screen

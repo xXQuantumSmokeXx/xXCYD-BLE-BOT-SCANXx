@@ -31,6 +31,7 @@
 // 16k prefixes across ~200 vendors; binary search keeps the lookup cheap.
 #include "oui_table.h"
 #include "sd_log.h"
+#include "signature_match.h"
 
 static const char* lookupOUI(const char* macStr) {
     // macStr is "AA:BB:CC:DD:EE:FF"; the key is the first three octets.
@@ -694,7 +695,7 @@ static void logBleDevice(const BTDeviceEntry *e, const BLEDeviceData &d) {
     char line[320];
     int n = snprintf(line, sizeof(line),
         "{\"mac\":\"%s\",\"rssi\":%d,\"name\":\"%s\",\"vendor\":\"%s\","
-        "\"cid\":\"0x%04X\",\"app\":\"0x%04X\",\"tx\":%d,\"addr\":\"%s\",\"svc\":[",
+        "\"cid\":\"0x%04X\",\"app\":\"0x%04X\",\"tx\":%d,\"addr\":\"%s\",\"sig\":\"%s\",\"svc\":[",
         e->macStr, (int)d.rssi, e->name, e->manufacturer,
         d.hasMfgData ? d.manufacturerId : 0,
         d.hasAppearance ? d.appearance : 0,
@@ -760,6 +761,18 @@ entry->rssi = data.rssi;
             logBleDevice(entry, data);
             entry->logged = true;
             markLogged(data.mac);
+        }
+        // Detection signatures: name prefix / company id / service UUIDs. Runs on
+        // every packet because the name often arrives after the first advertisement.
+        {
+            const char *sig = signatureMatch(entry->name, entry->manufacturer,
+                                             data.hasMfgData, data.manufacturerId,
+                                             data.has128Svc, data.uuid128,
+                                             data.svcCount, data.svc16);
+            if (sig[0]) {
+                strncpy(entry->sigLabel, sig, sizeof(entry->sigLabel) - 1);
+                entry->sigLabel[sizeof(entry->sigLabel) - 1] = '\0';
+            }
         }
         // Shield check
         if (s_shieldUp && !entry->isAlert && !isKnownDevice(data.mac)) {

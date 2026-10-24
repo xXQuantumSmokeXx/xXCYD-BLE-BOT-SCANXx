@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "notes": "Detection rules. Each rule matches when every field present is satisfied. Order matters: first match wins, so put specific rules first. Evidence column is for humans, ignored by the generator.",
+  "signatures": [
+    {
+      "label": "Light",
+      "name_prefix": "Govee_",
+      "cid": "0x8803",
+      "evidence": "Govee_H805A_6698, random MAC, no OUI vendor, cid 0x8803"
+    },
+    {
+      "label": "Appliance",
+      "name_prefix": "AM410",
+      "evidence": "AM410 iQ, Espressif OUI, cid 0x0426, u128 98BD0001..."
+    },
+    {
+      "label": "Sensor",
+      "u128": "3E1D50CD7E3E427D8E1CB78AA87FE624",
+      "evidence": "three random-MAC devices sharing this u128, advertised name '4' (suspect parse)"
+    },
+    {
+      "label": "FindMy",
+      "cid": "0x004C",
+      "vendor_not": "Apple",
+      "evidence": "Apple Find My accessory protocol: third-party accessories advertise Apple's company id"
+    }
+  ]
+}

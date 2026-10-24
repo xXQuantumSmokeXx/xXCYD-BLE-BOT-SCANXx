@@ -32,6 +32,7 @@ struct BTDeviceEntry {
 
     // Common
     char        manufacturer[BT_MFG_NAME_LEN];  // OUI lookup result
+    char        sigLabel[16];             // matched signature label, empty if none
     BTSource    source;
     unsigned long firstSeenMs;
     unsigned long lastSeenMs;
